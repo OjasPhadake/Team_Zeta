@@ -1,0 +1,10 @@
+solvex/
+.claude/
+extracted_pincodes.csv
+*.geojson
+
+*.kmz
+*.tif
+ntl_pincode_aggregated.csv
+ntl_pixels_500m.csv
+*.parquet
