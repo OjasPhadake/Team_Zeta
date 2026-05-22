@@ -1,0 +1,12 @@
+Distributional Statistics (non-zero pixels)
+---------------------------------------------
+  Raw skewness        : 27.66  (> 0 = right-skewed)
+  log1p skewness      : 1.11  (closer to 0 = more normal)
+  Raw kurtosis        : 1433.33  (0 = normal; > 0 = heavy tails)
+
+  Shapiro-Wilk (log)  : W=0.9372, p=0.0000
+  → distribution departs from log-normal
+
+Implication for modelling:
+  Always use log1p(population) as input to XGBoost, not raw values.
+  Raw population has extreme right skew that will dominate tree splits.

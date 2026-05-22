@@ -1,0 +1,31 @@
+WorldPop India 2020 — EDA Summary
+==================================================
+File              : ind_ppp_2020.tif
+CRS               : EPSG:4326
+Shape             : 34497 rows × 35075 cols
+Resolution        : 93 m × 93 m
+NoData            : -99999.0
+
+Population statistics (non-zero pixels, sampled):
+  Total pop (full): 1,408,684,800
+  Non-zero pixels : 393,826,903  (100.0% of valid pixels)
+  Min             : 0.000069
+  Mean            : 3.5572
+  Std             : 11.3368
+  Max             : 1717.31
+
+Percentiles (non-zero pixels):
+  p1     : 0.0043
+  p5     : 0.0376
+  p25    : 0.7495
+  p50    : 1.5818
+  p75    : 3.3795
+  p90    : 7.6032
+  p95    : 11.4062
+  p99    : 28.4930
+  p99.9  : 146.6745
+
+Interpretation:
+  Values = PPP-adjusted population per 100m pixel.
+  Most pixels < 1 person (rural/forest/water).
+  Dense urban cores (BKC, Connaught Place) exceed 500.

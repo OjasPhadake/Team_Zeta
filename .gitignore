@@ -8,3 +8,6 @@ extracted_pincodes.csv
 ntl_pincode_aggregated.csv
 ntl_pixels_500m.csv
 *.parquet
+
+worldpop.md
+worldpop_pixels_sample.csv
