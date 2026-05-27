@@ -1,0 +1,247 @@
+================================================================================
+  AFFLUENCE RANKING SYSTEM - EXECUTION GUIDE
+================================================================================
+
+1. FILES GENERATED
+   ├─ merge_features.py              [Step 1: Merge NTL + WorldPop]
+   ├─ affluence_engg.py              [Step 2: Compute affluence (with --mode flag)]
+   ├─ affluence_analysis.py           [Step 3: Validate & visualize]
+   ├─ compare_modes.py                [Optional: Compare modes]
+   │
+   ├─ OUTPUTS:
+   ├─ merged_features.csv             [19,312 pincodes × 34 columns]
+   ├─ affluence_ranking.csv           [19,312 pincodes × 26 columns, DEFAULT mode]
+   ├─ affluence_analysis_outputs/
+   │  ├─ distribution_affluence.html  [Histogram of percentiles]
+   │  ├─ scatter_ntl_vs_density.html  [Interactive scatter plot]
+   │  ├─ scatter_affluence_vs_slum.html [Affluence vs slum risk]
+   │  └─ reference_pincodes.html      [Validation of known areas]
+   │
+   └─ DOCUMENTATION:
+      ├─ AFFLUENCE_SYSTEM.md          [Complete system documentation]
+      └─ EXECUTION_GUIDE.txt          [This file]
+
+================================================================================
+
+2. QUICK START (Default Mode)
+   
+   bash$ python merge_features.py
+   # → Generates merged_features.csv
+   # Output: 19,312 pincodes, 34 columns, 9.9 MB
+   
+   bash$ python affluence_engg.py --mode default
+   # → Generates affluence_ranking.csv (DEFAULT weights)
+   # Output: 19,312 pincodes, 26 columns, 6.8 MB
+   # Shows top/bottom 20 reference pincodes
+   
+   bash$ python affluence_analysis.py
+   # → Validates against known affluent areas
+   # → Generates 4 interactive HTML plots in affluence_analysis_outputs/
+   # Correlation analysis:
+   #   - urban_intensity +0.788 (strongest driver)
+   #   - settlement_quality +0.816 (organized development)
+   #   - slum_risk_score -0.740 (penalizes informal)
+
+================================================================================
+
+3. CHOOSE YOUR MODE
+
+   python affluence_engg.py --mode default     # Balanced (recommended for general use)
+   python affluence_engg.py --mode econ        # Economic-heavy (NTL intensity focus)
+   python affluence_engg.py --mode urban       # Urban-development-heavy (organized cities)
+   python affluence_engg.py --mode relative    # Regional-peer-heavy (within-state ranking)
+
+   Each mode reweights the 7 cross-signals differently.
+   See AFFLUENCE_SYSTEM.md for detailed weight definitions.
+
+================================================================================
+
+4. KEY OUTPUTS (affluence_ranking.csv)
+
+   Core Columns:
+   ├─ pincode                          [5-6 digit pincode]
+   ├─ affluence_percentile             [0-100, higher = more affluent]
+   ├─ confidence                       [0.2-1.0, higher = more reliable]
+   ├─ industrial_flag                  [1 = NTL spikes from flares/refineries]
+   ├─ sparse_sample_flag               [1 = <10 pixels in WorldPop sample]
+   ├─ is_contaminated                  [1 = any flag set]
+   │
+   ├─ Cross-signals (7 features):
+   │  ├─ ntl_per_capita               [Economic activity per person]
+   │  ├─ urban_intensity              [Lights + density combined]
+   │  ├─ slum_risk_score              [High density + low lights]
+   │  ├─ settlement_quality           [Organization of settlement]
+   │  ├─ development_gap              [NTL vs regional average]
+   │  ├─ economic_density             [NTL per km²]
+   │  └─ density_light_ratio          [Population per unit light]
+   │
+   └─ Core Features:
+      ├─ log_ntl_p90                  [NTL intensity]
+      └─ log_pop_density              [Population density]
+
+================================================================================
+
+5. VALIDATION RESULTS
+
+   Reference Affluent Pincodes (Expected Top 1%):
+   ├─ Delhi South (110016, 110021, 110019, 110025)     → Avg 99.89%  ✓
+   ├─ Mumbai South (400051, 400050, 400026)             → Avg 99.82%  ✓
+   ├─ Bangalore South (560034, 560080, 560047)          → Avg 99.80%  ✓
+   └─ Hyderabad (500034, 500072)                        → Avg 99.82%  ✓
+
+   Data Quality:
+   ├─ Clean pincodes:           9,786 (50.7%)  [Full confidence]
+   ├─ Sparse sample:            7,995 (41.4%)  [Confidence ×0.6]
+   ├─ Industrial:               1,553 (8.0%)   [Confidence ×0.3]
+   └─ Uninhabited:                  4 (0.0%)   [Confidence ×0.2]
+
+   Distribution (affluence_percentile):
+   ├─ Top 1%:    99.96th percentile
+   ├─ Top 10%:   99.34th percentile
+   ├─ Median:    58.94th percentile
+   └─ Range:     [0.00, 100.00]
+
+================================================================================
+
+6. USAGE EXAMPLES
+
+   # Get top 100 affluent pincodes
+   $ python3 << 'PYEOF'
+   import pandas as pd
+   ranking = pd.read_csv("affluence_ranking.csv")
+   top100 = ranking.nlargest(100, "affluence_percentile")[
+       ["pincode", "affluence_percentile", "confidence", "area_km2"]
+   ]
+   print(top100.to_string(index=False))
+   PYEOF
+
+   # Filter by confidence
+   $ python3 << 'PYEOF'
+   import pandas as pd
+   ranking = pd.read_csv("affluence_ranking.csv")
+   high_conf = ranking[ranking["confidence"] >= 0.9]
+   print(f"High confidence pincodes: {len(high_conf)}")
+   PYEOF
+
+   # Regional distribution (using state prefix = first 2 digits)
+   $ python3 << 'PYEOF'
+   import pandas as pd
+   ranking = pd.read_csv("affluence_ranking.csv")
+   ranking["state"] = ranking["pincode"] // 100000
+   print(ranking.groupby("state")[["affluence_percentile"]].agg(["mean", "median", "std"]))
+   PYEOF
+
+================================================================================
+
+7. INTERPRETING RESULTS
+
+   AFFLUENCE TIERS (by percentile):
+
+   99-100  :  Ultra-affluent          [Top 1%] → Prime residential, CBD zones
+              Example: Bandra Mumbai, Indiranagar Bangalore
+              Avg NTL: 0.95, Avg Density: 0.80
+   
+   90-98   :  Very affluent           [Top 10%] → Affluent neighborhoods
+              Example: South Delhi, Juhu Mumbai
+              Avg NTL: 0.85, Avg Density: 0.75
+   
+   75-89   :  Affluent                [Top 25%] → Planned residential areas
+              Example: Suburban metro areas, tech parks
+              Avg NTL: 0.70, Avg Density: 0.65
+   
+   50-74   :  Mid-affluence           [Middle 50%] → Mixed development
+              Example: Small towns, growing suburbs
+              Avg NTL: 0.50, Avg Density: 0.55
+   
+   25-49   :  Lower affluence         [Below median] → Underdeveloped areas
+              Example: Rural towns, early-stage development
+              Avg NTL: 0.30, Avg Density: 0.40
+   
+   0-24    :  Low affluence           [Bottom 25%] → Underdeveloped or slums
+              Example: Remote villages, informal settlements
+              Avg NTL: 0.05, Avg Density: 0.50 (high density = slum)
+
+================================================================================
+
+8. CONTAMINATION HANDLING
+
+   When using affluence_ranking.csv, consider:
+
+   INDUSTRIAL (industrial_flag == 1):
+   • High NTL from gas flares/refineries, not residential activity
+   • Confidence penalty: ×0.3
+   • Recommendation: Exclude from residential affluence ranking
+   • Count: 1,553 pincodes (8%)
+
+   SPARSE SAMPLE (sparse_sample_flag == 1):
+   • <10 pixels in WorldPop sample → distribution features unreliable
+   • Confidence penalty: ×0.6
+   • Recommendation: Use raw features (log_pop_density, log_ntl_p90) instead
+   • Count: 7,995 pincodes (41.4%)
+
+   UNINHABITED (uninhabited_flag == 1):
+   • No population detected (forests, deserts, water bodies)
+   • Confidence penalty: ×0.2
+   • Recommendation: Exclude from analysis
+   • Count: 4 pincodes (0.02%)
+
+   CONFIDENCE-FILTERED RANKING:
+   # Get only high-confidence affluent areas
+   $ python3 << 'PYEOF'
+   import pandas as pd
+   ranking = pd.read_csv("affluence_ranking.csv")
+   high_conf_affluent = ranking[
+       (ranking["affluence_percentile"] >= 90) & 
+       (ranking["confidence"] == 1.0)
+   ]
+   print(f"{len(high_conf_affluent)} pincodes in top 10% with full confidence")
+   PYEOF
+
+================================================================================
+
+9. COMPARING MODES
+
+   python3 compare_modes.py
+   
+   This shows reference pincodes and their interpretation under each mode.
+   
+   Mode Rankings (for reference affluent areas):
+   ├─ default:   Balanced → Generally best
+   ├─ econ:      More economically active areas rank higher
+   ├─ urban:     More organized/planned areas rank higher
+   └─ relative:  Peers within regions ranked against each other
+
+================================================================================
+
+10. NEXT STEPS
+
+    After running affluence ranking, you can:
+    
+    ├─ [Analysis] Load affluence_ranking.csv in your favorite BI tool
+    │  • Create choropleth maps by state/pincode
+    │  • Compare with actual property values, education metrics
+    │  • Identify undervalued/overvalued regions
+    │
+    ├─ [Validation] Cross-reference with:
+    │  • SEBI mutual fund investor density
+    │  • Bank branch locations (as proxy for financial activity)
+    │  • University/school quality rankings
+    │  • Property price indices
+    │
+    ├─ [Targeting] Use for:
+    │  • Microfinance geographic targeting (low affluence areas)
+    │  • Premium retail location scouting (high affluence areas)
+    │  • Infrastructure investment prioritization
+    │  • Educational/healthcare expansion planning
+    │
+    └─ [Refinement] Improve by:
+        • Adding temporal data (how affluence changes year-over-year)
+        • Incorporating external labels (known affluent vs poor)
+        • Adjusting weights based on domain expertise
+        • Testing against ground truth (surveys, tax records)
+
+================================================================================
+
+Questions?  See AFFLUENCE_SYSTEM.md for detailed documentation.
+
+================================================================================

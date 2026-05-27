@@ -454,16 +454,24 @@ else:
     print(f"  Zonal stats complete in {elapsed/60:.1f} min.")
 
     pop_df = pd.DataFrame(stats_list)
-    pop_df.columns = [
-        "pop_sum", "pop_mean", "pop_std", "pop_pixel_count",
-        "pop_p50", "pop_p90", "pop_p95",
-        "pop_px_above_100", "pop_px_nonzero",
-    ]
+    # Rename by key — safe regardless of pandas/rasterstats column order.
+    # rasterstats stat keys: sum, mean, std, count, percentile_50/90/95
+    # add_stats keys are already named: pop_px_above_100, pop_px_nonzero
+    pop_df = pop_df.rename(columns={
+        "sum":           "pop_sum",
+        "mean":          "pop_mean",
+        "std":           "pop_std",
+        "count":         "pop_pixel_count",
+        "percentile_50": "pop_p50",
+        "percentile_90": "pop_p90",
+        "percentile_95": "pop_p95",
+    })
     pop_df.insert(0, "pincode", gdf["pincode"].values)
     pop_df = pop_df.fillna(0)
 
     # ── Density & scale features ──────────────────────────────────────────────
-    # Each 100m pixel = 0.01 km²
+    # Each 100m pixel ≈ 0.01 km²  (0.000833° × 111,320 m/° ≈ 92m at 20°N)
+    # pop_pixel_count is the rasterstats "count" stat = # valid non-nodata pixels.
     pop_df["area_km2"]        = pop_df["pop_pixel_count"] * 0.01
     pop_df["pop_density"]     = (pop_df["pop_sum"]
                                  / pop_df["area_km2"].replace(0, np.nan)).fillna(0)
@@ -472,20 +480,28 @@ else:
 
     # ── Settlement structure features ─────────────────────────────────────────
     # pop_cv: coefficient of variation — low = uniform settlement, high = patchy
+    # true mean per pixel = pop_sum / pop_pixel_count
+    pop_df["pop_true_mean"] = (pop_df["pop_sum"]
+                               / pop_df["pop_pixel_count"].replace(0, np.nan)).fillna(0)
     pop_df["pop_cv"] = (pop_df["pop_std"]
-                        / pop_df["pop_mean"].replace(0, np.nan)).fillna(0).clip(upper=10)
+                        / pop_df["pop_true_mean"].replace(0, np.nan)).fillna(0).clip(upper=10)
 
     # pop_concentration: p90/p50 — high = a few very dense pockets
     pop_df["pop_concentration"] = (pop_df["pop_p90"]
                                    / pop_df["pop_p50"].replace(0, np.nan)).fillna(1).clip(upper=50)
 
-    # high_density_ratio: fraction of pixels with > 100 persons per 100m pixel
+    # high_density_ratio: fraction of pixels above 100 persons/pixel.
+    # add_stats functions receive the masked bounding-box array — use pop_px_nonzero
+    # as the denominator (same source as pop_px_above_100) so the ratio is consistent.
     pop_df["high_density_ratio"] = (pop_df["pop_px_above_100"]
-                                    / pop_df["pop_pixel_count"].replace(0, np.nan)).fillna(0)
+                                    / pop_df["pop_px_nonzero"].replace(0, np.nan)).fillna(0)
 
-    # settled_area_ratio: fraction of pincode with at least one resident
+    # settled_area_ratio: WorldPop uses nodata for water/ocean, so almost all
+    # valid pixels have pop > 0.  This ratio captures pincodes where genuinely
+    # zero-population pixels exist (parks, industrial voids within the boundary).
     pop_df["settled_area_ratio"] = (pop_df["pop_px_nonzero"]
-                                    / pop_df["pop_pixel_count"].replace(0, np.nan)).fillna(0)
+                                    / pop_df["pop_pixel_count"].replace(0, np.nan)
+                                    ).fillna(0).clip(upper=1)
 
     # ── Cross-signal features (NTL × population) ─────────────────────────────
     # Requires ntl_pincode_aggregated.csv for raw (unscaled) ntl_sum column.
